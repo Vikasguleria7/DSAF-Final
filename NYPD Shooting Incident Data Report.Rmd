@@ -1,0 +1,216 @@
+---
+title: "NYPD Shooting Incident Data Report"
+date: "2023-11-16"
+output:
+  pdf_document: default
+  html_document: default 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+
+```
+
+# Loading the data
+```{r}
+
+
+
+url_NYPD  <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD" 
+NYPD  <- read.csv(url_NYPD) 
+# NYPD
+
+```
+
+# Tidying up the data
+```{r}
+
+# data manipulation
+
+NYPD_tidy <- NYPD %>%
+  select(c("OCCUR_DATE","OCCUR_TIME","BORO","PRECINCT",
+           "STATISTICAL_MURDER_FLAG","VIC_AGE_GROUP","VIC_SEX","VIC_RACE")) %>%
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE),
+         OCCUR_TIME = hms(OCCUR_TIME),
+         STATISTICAL_MURDER_FLAG = as.logical(STATISTICAL_MURDER_FLAG),
+         Shootings = 1,
+         Year = year(OCCUR_DATE))
+```
+# Creating the graphs/visuals and analyzing 
+
+```{r}
+
+NYPD_tidy %>%
+  ggplot(aes(x = VIC_RACE, fill = VIC_RACE)) +
+  geom_bar() +
+  #geom_label(aes(VIC_RACE)) +
+  labs(title = "NYPD Shootings Incidents by Victim Race",
+       subtitle = "(2006 - 2022)",
+       x = "Victim Race",
+       y = "Total Number of Shootings",
+       caption = "(Figure - 1)")
+```
+```{r}
+NYPD_year <- NYPD_tidy %>%
+  group_by(Year) %>%
+  summarize(Shootings = sum(Shootings))
+
+NYPD_year %>%
+  ggplot(aes(x = as.factor(Year), y = Shootings)) +
+  geom_col() +
+  #geom_point(color = 'blue') +
+  scale_x_discrete(labels = as.character(2006:2022)) +
+  labs(
+    title = "NYPD Shooting Incidents by Year",
+    x = "Years (2006 - 2022)",
+    y = "Total Number of Shootings"
+  )
+
+
+
+
+```
+
+```{r}
+NYPD_tidy %>%
+   ggplot(aes(x = VIC_AGE_GROUP, fill = VIC_AGE_GROUP)) +
+  geom_bar( ) +
+  labs(title = "NYPD Shootings Incidents by Victim Age Group",
+       subtitle = "(2006 - 2022)",
+       x = "Victim Age Group",
+       y = "Total Number of Shootings",
+       caption = "(Figure - 2)")
+
+#min(NYPD_tidy$OCCUR_DATE)
+
+```
+```{r}
+#data <- data.frame(
+#  category = c("A", "B", "C", "D"),
+#  value = c(10, 15, 8, 12)
+#)
+
+# Creating a bar plot
+#bar_plot <- ggplot(data, aes(x = category, y = value)) +
+#  geom_bar(stat = "identity", fill = "skyblue") +
+#  geom_text(aes(label = value), vjust = -0.5, size = 4, color = "black") +  # Adding data labels
+#  labs(title = "Bar Plot with Data Labels")
+
+
+NYPD_tidy %>%
+  
+  ggplot(aes(x = VIC_SEX, fill = STATISTICAL_MURDER_FLAG)) +
+  geom_bar(width = 0.5, orientation = "horizontal") +
+ 
+  labs(title = "NYPD Shootings Incidents by Victim's Gender & Murder Flag",
+       subtitle = "(2006 - 2022)",
+       x = "Victim Gender",
+       y = "Total Number of Shootings",
+       caption = "(Figure - 2)")
+
+#NYPD_tidy
+#sum(NYPD_tidy$Shootings)
+NYPD_M <- NYPD_tidy %>% filter(VIC_SEX== 'M')
+NYPD_M
+sum(NYPD_M$Shootings)
+sum(NYPD_F$STATISTICAL_MURDER_FLAG)
+
+#filtered_data <- data %>%
+ # filter(value > 10)
+```
+
+
+
+```{r}
+NYPD_boro <- NYPD_tidy %>%
+  group_by(BORO, OCCUR_DATE,Shootings) %>%
+  summarize(Shootings = sum(Shootings),
+            STATISTICAL_MURDER_FLAG = sum(STATISTICAL_MURDER_FLAG),
+            .groups = 'drop') %>%
+  select(BORO,OCCUR_DATE,Shootings,STATISTICAL_MURDER_FLAG) %>%
+  ungroup()
+
+NYPD_boro_year <- NYPD_tidy %>%
+  mutate(Year = year(OCCUR_DATE)) %>%
+  group_by(BORO, Year, Shootings) %>%
+  summarize(Shootings = sum(Shootings),
+            STATISTICAL_MURDER_FLAG = sum(STATISTICAL_MURDER_FLAG), 
+            .groups = 'drop') %>%
+  select(BORO, Year,Shootings,STATISTICAL_MURDER_FLAG) %>%
+  ungroup()
+
+NYPD_boro_total <- NYPD_boro_year %>%
+  group_by(BORO) %>%
+  summarize(Shootings = sum(Shootings))
+NYPD_boro_year %>%
+  ggplot(aes(x = Year, y = Shootings,color = BORO)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "NYPD Shootings by Borough by Year",
+       subtitle = "(2006 - 2022)",
+       x = "Year",
+       y = "Number of Shootings",
+       caption = "(Figure - 3)")
+
+```
+
+
+
+
+
+```{r}
+
+
+
+NYPD_time_day <- NYPD_tidy %>%
+  group_by(OCCUR_TIME,Shootings) %>%
+  summarize(Shootings = sum(Shootings),
+            STATISTICAL_MURDER_FLAG = sum(STATISTICAL_MURDER_FLAG),
+            .groups = 'drop') %>%
+  select(OCCUR_TIME,Shootings,STATISTICAL_MURDER_FLAG)
+
+NYPD_time_day %>%
+  ggplot(aes(x = OCCUR_TIME, y = Shootings)) +
+  geom_tile() +
+  scale_fill_gradient(low = "blue", high = "red") +
+  scale_x_time() +
+  labs(title = "NYPD Shootings by the Time of Day",
+       subtitle = "(2006 - 2022)",
+       x = "Time of day (24 Hour Time System)",
+       y = "Shootings",
+       caption = "(Figure - 4)")
+```
+
+
+# Modeling (Linear Model)
+
+```{r} 
+
+NYPD_time_hour <- NYPD_tidy %>%
+  mutate(Hour = hour(OCCUR_TIME)) %>%
+  group_by(Hour,Shootings) %>%
+  summarize(Shootings = sum(Shootings),
+            STATISTICAL_MURDER_FLAG = sum(STATISTICAL_MURDER_FLAG),
+            .groups = 'drop') %>%
+  mutate(Hour2 = Hour^2) %>%
+  select(Hour,Shootings,STATISTICAL_MURDER_FLAG, Hour2)
+
+NYPD_time_hour_model <- lm(data = NYPD_time_hour, Shootings ~ Hour + Hour2)
+summary(NYPD_time_hour_model)
+NYPD_time_hour %>%
+  ggplot(aes(x = Hour, y = Shootings)) +
+  geom_line() +
+  stat_smooth(method = "lm", formula = y ~ x + I(x^2), linewidth = 1) +
+  labs(title = "NYPD Shootings by Time of Day per Hour",
+       subtitle = "(2006-2022)",
+       x = " Hours (24 Hour Time System)",
+       y = "Shootings that Hour",
+       caption = "(Figure - 5)")
+```
+
+# Conclusion and Bias Identification/Mitigation
+
+Once I cleaned up the data and started looking into it. Figure 1 and 2 concludes that majority of the victim's are of Black race and between ages 18-44 (young adults). Furthermore, I looked into the shootings by borough and found that areas like Manhattan have comparatively lower shootings than Brooklyn and Bronx. I realized that I might have Bias into thinking that because more people of Black race aged 18-44 live in Brooklyn and Bronx area than in Manhattan, this might have caused more shootings in these areas. However, then I looked into it subjectively and concluded than since Brooklyn and Bronx have more population in general than Manhattan, this possibly can be the cause of more shootings. I concluded this with my model where I looked at the time of the shootings (late nights and early mornings), when people are close to their home versus the office space, which is tend to be in Manhattan area. 
