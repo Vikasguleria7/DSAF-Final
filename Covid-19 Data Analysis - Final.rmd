@@ -1,0 +1,215 @@
+---
+title: 'COVID Data Analysis - Final'
+output: pdf_document
+---
+
+#Statement of Interest 
+After tidying up the data for the US population, the primary analysis (modeling) is done to understand the relationship between cases and deaths due to covid-19. 
+
+```{r setup, include=FALSE}
+library(formatR)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Downloading and Tidying Data 
+Downloading the covid-19 data from the Johns Hopkins github site.The data contains cases, deaths due to covid-19 alongside the population.
+First case was identified on 1/22/2020 and latest case this data contains is 3/9/2023.
+
+Tidying the US data by reformatting the date field into a date datatype and filtering the columns necessary for the analysis.
+
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(dplyr)
+
+
+url_in <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
+
+file_names <- c("time_series_covid19_confirmed_US.csv","time_series_covid19_deaths_US.csv","time_series_covid19_confirmed_global.csv",
+                "time_series_covid19_deaths_global.csv")
+urls <- str_c(url_in, file_names)
+
+
+US_cases <- read_csv(urls[1])
+US_deaths <- read_csv(urls[2])
+global_cases <- read_csv(urls[3])
+global_deaths <- read_csv(urls[4])
+
+
+US_cases <- US_cases %>% pivot_longer(cols = -(UID:Combined_Key), names_to = "date", values_to = "cases") %>% select(Admin2:cases) %>% mutate(date = mdy(date)) %>% select(-c(Lat, Long_))
+US_deaths <- US_deaths %>% pivot_longer(cols = -(UID:Population), names_to = "date", values_to = "deaths") %>% select(Admin2:deaths) %>% mutate(date = mdy(date)) %>% select(-c(Lat, Long_))
+US <- US_cases %>% full_join(US_deaths)
+head(US,5)
+
+```
+
+Combining the data to calculate total cases/deaths for the US.
+
+```{r}
+min(US$date)
+max(US$date)
+```
+Calculating the deaths per millions
+
+```{r}
+US_by_state <- US %>% group_by(Province_State, Country_Region, date) %>% summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>% mutate(deaths_per_mill = deaths * 1000000 / Population) %>% select(Province_State, Country_Region, date, cases, deaths, deaths_per_mill, Population) %>% ungroup()
+
+
+US_totals <- US_by_state %>% group_by(Country_Region, date) %>% summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>% mutate(deaths_per_mill = deaths * 1000000 / Population) %>% select(Country_Region, date, cases, deaths, deaths_per_mill, Population) %>% ungroup()
+
+States_totals <- US_by_state %>% group_by(Province_State, date) %>% summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>% mutate(deaths_per_mill = deaths * 1000000 / Population) %>% select(Province_State, date, cases, deaths, deaths_per_mill, Population) %>% ungroup()
+
+#US_totals = US_totals %>% rename_at('Country_Region', ~'Country')
+#US_by_state = US_by_state %>% rename_at('Province_State', ~'State')
+
+head(US_totals)
+tail(US_by_state)
+head(States_totals)
+
+```
+
+Graphing the Covid-19 cases and deaths for the US
+
+```{r}
+US_totals %>% filter(cases > 0) %>% ggplot(aes(x = date, y = cases)) + geom_line(aes(color = "cases")) + geom_point(aes(color = "cases")) + geom_line(aes(y = deaths, color = "deaths")) + geom_point(aes(y = deaths, color = "deaths")) + scale_y_log10() + theme(legend.position = "bottom", axis.text.x = element_text(angle = 90)) + labs(title = "Covid-19 in US", y = NULL)
+```
+
+Including variables for cases and deaths per thousand allows for a more detailed examination, especially beneficial for states with smaller populations.
+Incorporating a linear model that utilizes cases per thousand as a predictor to estimate deaths per thousand across all states and visualizing it on a graph.
+
+```{r}
+US_by_state <- US_by_state %>% mutate(new_cases = cases - lag(cases), new_deaths = deaths - lag(deaths), cases_per_thou = cases * 1000 / Population, deaths_per_thou = deaths * 1000 / Population) %>% filter(cases > 0, Population > 0)
+summary(US_by_state)
+
+mod <- lm(deaths_per_thou ~ cases_per_thou, data = US_by_state)
+summary(mod)
+US_w_pred <- US_by_state %>% mutate(pred = predict(mod))
+US_w_pred %>% ggplot() + labs(title='Deaths per thousand as a function of Cases per thousand for all States') + geom_point(aes(x = cases_per_thou, y = deaths_per_thou), color = "blue") + geom_point(aes(x = cases_per_thou, y = pred), color = "red")
+```
+
+# Analysis
+I have done my analysis in two areas -
+
+1) I have explored the possibility of clustering states based on their models. My approach involves creating a linear model for each state, then applying these models to all states, including the US territories. This means we'll have 56 models, each applied to 56 states or territories. I'll assess how well the actual deaths align with the predicted deaths from these individual models.
+
+2) Since I live in Idaho, I have compared Idaho's deaths per-capita to that of California's deaths per-capita.
+
+
+#Modeling 
+
+```{r}
+options(warn=-1)
+States <- split(US_by_state, US_by_state$Province_State)
+for(i in 1:length(States))
+{
+  States[i][[1]] <- States[i][[1]] %>% mutate(cases_per_thou = as.numeric(cases_per_thou)) %>% mutate(deaths_per_thou = as.numeric(deaths_per_thou))
+}
+
+models = c()
+states = c()
+corrs = c()
+
+for(state in States)
+{
+  m <- lm(deaths_per_thou ~ cases_per_thou, data = state)
+  name <- state$Province_State[1]
+  for(sstate in States)
+  {
+    this_s <- predict(m, sstate)
+    c <- cor(sstate$deaths_per_thou, this_s)
+    models <- append(models, name)
+    states <- append(states, sstate$Province_State[1])
+    corrs <- append(corrs, c)
+  }
+}
+results <- tibble(Model=models, State=states, Corr=corrs)
+summary(results)
+head(results,5)
+results_min <- results %>% top_n(-2, results$Corr)
+results_min <- head(results_min, 2)
+results_max <- results %>% top_n(2, results$Corr)
+results_max <- head(results_max,2)
+results <- results_max %>% full_join(results_min)
+results %>% ggplot() + geom_tile(aes(x = Model, y = State)) + scale_fill_gradient(low = "blue", high = "red") 
+
+```
+Here is HeatMap of States with highest correlation among the predictions of deaths per thousand
+
+
+The correlations span a wide spectrum, from highly precise matches surpassing 99% to weaker associations at around 84%. To cluster states into predictor sets, I'll identify the state-model pair with the highest correlation, forming an initial set and excluding these from the remaining states. Iterating this process, I'll assign states to existing sets if the modeling state is grouped; otherwise, I'll create new sets. States without correlating models (i.e., no deaths) will form unique sets. This approach mirrors a weighted graph partitioning algorithm, treating states as nodes and correlations as edges. As a greedy algorithm favoring the next best fit, it might not yield the most optimal set results; adjusting correlation analyses or employing broader comparisons could alter the number of sets obtained.
+
+
+Now that we've created our sets, let's look at how the states were grouped together and the graph of their cases and deaths to see how the models look.
+
+```{r visualizeSets}
+for(i in 1:(count-1))
+{
+  curr_set <- sets %>% filter(Set == i) %>% select(State)
+  cat(str_c("Group ", as.character(i), ":\n"))
+  cat(curr_set$State, sep="\n")
+  cat("\n")
+  curr_data <- curr_data <- US_by_state %>% filter(Province_State %in% curr_set$State)
+  print(ggplot(curr_data, aes(x = cases_per_thou, y = deaths_per_thou, color= Province_State))+geom_point())
+}
+
+options(warn=1)
+```
+
+#Analysis number #2
+
+Comparing Idaho's deaths per-capita to that of California's deaths per-capita.
+The below cell will give an error if run twice as the re-naming can only be done once. 
+
+```{r knitr::opts_chunk$set(echo = FALSE)}
+
+States_totals = States_totals %>% rename_at('cases', ~'total_cases') 
+States_totals =  States_totals %>% rename_at('deaths', ~'total_deaths')
+#States_totals
+
+Idaho <- States_totals[States_totals$Province_State == 'Idaho',]
+California <- States_totals[States_totals$Province_State == 'California',]
+
+sum(Idaho$total_deaths) ##3184340 - Idaho Population -> 1.9M
+sum(California$total_deaths) ##65490302 - California Population -> 39.2M
+```
+
+
+```{r}
+
+Idaho_per_capita <- Idaho %>% mutate(ID_deaths_per_capita = total_deaths / 1.9e7)
+California_per_capita <- California %>% mutate(CA_deaths_per_capita = total_deaths / 1.9e7)
+summary(Idaho_per_capita)
+summary(California_per_capita)
+```
+
+```{r}
+# Merge Idaho and California per capita data
+combined_data <- merge(x = Idaho_per_capita, y = California_per_capita, by = "date", all = TRUE)
+
+# Create line plots for deaths per capita
+ggplot(combined_data, aes(x = date, y = CA_deaths_per_capita, color = "California", linetype = "deaths")) +
+  geom_line() +
+  geom_line(aes(y = ID_deaths_per_capita, color = "Idaho", linetype = "deaths")) +
+  labs(title = "Cumulative Deaths Per Capita Comparison",
+       x = "Date",
+       y = "Cumulative Deaths Per Capita") +
+  scale_color_manual(values = c("California" = "blue", "Idaho" = "red")) +
+  scale_linetype_manual(values = c("dashed")) +
+  theme_minimal()
+
+
+
+```
+
+## Bias
+Analysis 1) The primary bias in forming these sets lies in the absence of a correlation cutoff, potentially including states erroneously within predictor sets. Ideally, we'd aim to cluster states with very close correlations. To address this, we could adopt various strategies. Implementing a cutoff value for correlations and converting values below this threshold to NA is one approach. Rather than simply adding a new state to an existing set, when the generating state is already grouped, we could assess how well the new state aligns with the remaining models in that set. If it poorly matches the others, we could initiate a new set for that state or mark the correlation as NA, continually seeking a better overall set fit. Both methods are likely to eliminate outlier states from groups and generate sets with higher internal correlation. The difference lies in the potential number of sets created and the trade-off between pursuing greater accuracy and smaller sets versus achieving better matches at the expense of having fewer sets. Comparing these approaches in future analyses could provide insights into optimizing the clustering of states in this dataset.
+
+Analysis 2) Since I live in Idaho, I picked Idaho to compare to California for deaths per-capita analysis. I had an intuition that Idaho's deaths per-capita would be lower when per compared to California's. There can be various reasons for this, for example - different population density, reporting methods, lifestyle, etc.. Hence I would conclude that my bias have been confirmed by the analysis.
+
+## Conclusion
+Analysis 1) I successfully grouped states based on mutual predictive patterns, noting some outliers and a few groups with weaker correlations. Among the 17 groups, nine showed consistent mutual prediction, while one group, devoid of deaths, remained separate. This initial analysis is promising for a first attempt, yet exploring alternative clustering methods beyond a purely greedy algorithm could yield valuable insights. Nevertheless, the results emphasize subsets of states demonstrating strong predictive relationships with deaths in other states, suggesting room for deeper analysis and refinement.
+
+Analysis 2) As suspected (might be my bias), Idaho's deaths per-capita is consistently lower than California's. Furher investigation can be done on the reasons behind it.
+
