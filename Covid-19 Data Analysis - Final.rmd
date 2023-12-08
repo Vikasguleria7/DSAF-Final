@@ -143,19 +143,19 @@ The correlations span a wide spectrum, from highly precise matches surpassing 99
 
 Now that we've created our sets, let's look at how the states were grouped together and the graph of their cases and deaths to see how the models look.
 
-```{r visualizeSets}
-for(i in 1:(count-1))
-{
-  curr_set <- sets %>% filter(Set == i) %>% select(State)
-  cat(str_c("Group ", as.character(i), ":\n"))
-  cat(curr_set$State, sep="\n")
-  cat("\n")
-  curr_data <- curr_data <- US_by_state %>% filter(Province_State %in% curr_set$State)
-  print(ggplot(curr_data, aes(x = cases_per_thou, y = deaths_per_thou, color= Province_State))+geom_point())
-}
+#```{r visualizeSets}
+#for(i in 1:(count-1))
+#{
+# curr_set <- sets %>% filter(Set == i) %>% select(State)
+#  cat(str_c("Group ", as.character(i), ":\n"))
+#  cat(curr_set$State, sep="\n")
+# cat("\n")
+#  curr_data <- curr_data <- US_by_state %>% filter(Province_State %in% curr_set$State)
+#  print(ggplot(curr_data, aes(x = cases_per_thou, y = deaths_per_thou, color= Province_State))+geom_point())
+#}
 
-options(warn=1)
-```
+#options(warn=1)
+#```
 
 #Analysis number #2
 
