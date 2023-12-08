@@ -88,16 +88,6 @@ NYPD_tidy %>%
 
 ```
 ```{r}
-#data <- data.frame(
-#  category = c("A", "B", "C", "D"),
-#  value = c(10, 15, 8, 12)
-#)
-
-# Creating a bar plot
-#bar_plot <- ggplot(data, aes(x = category, y = value)) +
-#  geom_bar(stat = "identity", fill = "skyblue") +
-#  geom_text(aes(label = value), vjust = -0.5, size = 4, color = "black") +  # Adding data labels
-#  labs(title = "Bar Plot with Data Labels")
 
 
 NYPD_tidy %>%
@@ -111,15 +101,8 @@ NYPD_tidy %>%
        y = "Total Number of Shootings",
        caption = "(Figure - 2)")
 
-#NYPD_tidy
-#sum(NYPD_tidy$Shootings)
-NYPD_M <- NYPD_tidy %>% filter(VIC_SEX== 'M')
-NYPD_M
-sum(NYPD_M$Shootings)
-sum(NYPD_F$STATISTICAL_MURDER_FLAG)
 
-#filtered_data <- data %>%
- # filter(value > 10)
+
 ```
 
 
